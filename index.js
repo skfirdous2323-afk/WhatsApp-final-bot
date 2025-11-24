@@ -319,155 +319,152 @@ app.post("/faq", async (req, res) => {
 
 
 // ✅ Super-Smart Router for Xefere Store
+// SMART ROUTER
 app.post("/smart", async (req, res) => {
   let userMessage = req.body.message || "";
 
   try {
-let userMessage = req.body.message || "";
+    // Translate to English (fallback to original)
+    try {
+      userMessage = await translateText(userMessage, "en");
+    } catch (err) {
+      console.error("❌ Translation failed:", err);
+    }
 
-try {
-  // 🌍 Try translating to English
-  userMessage = await translateText(userMessage, "en");
-} catch (err) {
-  console.error("❌ Translation error:", err);
-  // Translation fail ho jaye to original message use karo
-  userMessage = req.body.message || "";
-}
-    const SHOPIFY_API_URL =
-      process.env.SHOPIFY_API_URL ||
-      `https://${process.env.SHOPIFY_STORE_URL}/admin/api/2023-10`;
-
-    // 🎯 Detect intent using OpenAI
+    // 🔍 Intent Detection
     const completion = await client.chat.completions.create({
       model: "gpt-4o-mini",
       messages: [
         {
           role: "system",
-          content: `
-            You are a super-smart Shopify chatbot intent detector for Xefere Store.
-            Detect intent even if spelling is wrong, partial info is given, or message is in mixed language.
-            Respond ONLY with one word: track, product, faq, or chat.
-          `,
+          content:
+            `You are an intent classifier for Xefere Store. ` +
+            `Reply EXACTLY one word: track, return, product, faq, chat.\n\n` +
+            `Rules:\n` +
+            `- "not received", "order not delivered", "missing", "kaha hai order" → track\n` +
+            `- "return", "refund", "exchange" → return\n` +
+            `- "price", "show items", "products", "list", "buy" → product\n` +
+            `- "delivery time", "how many days", "shipping", "policy" → faq\n` +
+            `- Name, greeting, personal chat → chat\n` +
+            `- If user sends phone number → track`
         },
-        { role: "user", content: userMessage },
-      ],
+        { role: "user", content: userMessage }
+      ]
     });
 
-    let intent =
-      completion.choices?.[0]?.message?.content?.trim().toLowerCase() || "chat";
+    const intent =
+      completion.choices?.[0]?.message?.content?.trim().toLowerCase() ||
+      "chat";
 
-    console.log("🧭 AI detected intent:", intent);
+    console.log("🧭 Detected Intent:", intent);
 
     let finalReply = "";
 
-    // ✅ Track Order
+    // 📦 TRACK
     if (intent === "track") {
+      const mobile = userMessage.replace(/\D/g, "");
+
+      if (!mobile) {
+        return res.json({
+          reply: "📱 Please enter your mobile number to track order."
+        });
+      }
+
       const trackRes = await fetch(`${process.env.BASE_URL}/track`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile: userMessage.replace(/\D/g, "") }),
+        body: JSON.stringify({ mobile })
       });
+
       const data = await trackRes.json();
-      finalReply = data.message || data.error || "Could not fetch tracking info.";
+      return res.json({
+        reply: data.message || data.error || "No tracking info found."
+      });
     }
 
-
-// ✅ Product
-else if (intent === "product") {
-  const productRes = await fetch(`${process.env.BASE_URL}/product`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: userMessage }),
-  });
-
-  const data = await productRes.json();
-  let replyText = "🛍️ Check out our top products below 👇\n\n";
-
-  if (data.products && data.products.length > 0) {
-    // Build formatted text for chat
-    for (const p of data.products) {
-      replyText += `✨ *${p.title}*\n`;
-      replyText += `💰 Price: ₹${p.price}\n`;
-      replyText += `🔗 ${p.link}\n`;
-      if (!p.available || p.available === "Out of Stock ❌")
-        replyText += `⚠️ Currently Out of Stock\n`;
-      replyText += `\n`;
+    // 🔁 RETURN REQUEST
+    else if (intent === "return") {
+      return res.json({
+        reply:
+          "🔁 To return your order, please share the mobile number used during purchase."
+      });
     }
 
-    finalReply = replyText;
+    // 🛍️ PRODUCT SEARCH
+    else if (intent === "product") {
+      const productRes = await fetch(`${process.env.BASE_URL}/product`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMessage })
+      });
 
-    // ✅ Return response once
-    return res.json({
-      reply: finalReply,
-      products: data.products.map((p) => ({
-        title: p.title,
-        price: `₹${p.price}`,
-        link: p.link,
-        image: p.image,
-        available: p.available || "Out of Stock ❌",
-        shortDescription: p.shortDescription || "Popular product",
-      })),
-      footer: "✨ More deals available on our store homepage!",
-    });
-  } else {
-    // ✅ Also use return here
-    return res.json({
-      reply: data.reply || data.error || "No products found.",
-      products: [],
-    });
-  }
-}
+      const data = await productRes.json();
 
+      if (data.products && data.products.length > 0) {
+        const replyText =
+          "🛍️ Here are the best products based on your search:\n\n" +
+          data.products
+            .map(
+              (p) =>
+                `✨ *${p.title}*\n💰 Price: ₹${p.price}\n🔗 ${p.link}\n${
+                  p.available ? "" : "⚠️ Out of Stock"
+                }\n`
+            )
+            .join("\n");
 
+        return res.json({
+          reply: replyText,
+          products: data.products
+        });
+      }
 
+      return res.json({
+        reply: data.reply || "No matching products found."
+      });
+    }
 
+    // ❓ FAQ
+    else if (intent === "faq") {
+      const faqRes = await fetch(`${process.env.BASE_URL}/faq`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ message: userMessage })
+      });
 
+      const data = await faqRes.json();
+      return res.json({
+        reply: data.reply || "No FAQ found for this question."
+      });
+    }
 
-// ✅ FAQ
-
-
-
-else if (intent === "faq") {
-  const faqRes = await fetch(`${process.env.BASE_URL}/faq`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ message: userMessage }),
-  });
-  const data = await faqRes.json();
-  finalReply = data.reply || "No FAQ found.";
-}    
-
-
-    // 💬 General Chat / fallback
+    // 💬 GENERAL CHAT
     else {
       const chatRes = await client.chat.completions.create({
         model: "gpt-4o-mini",
         messages: [
           {
             role: "system",
-            content: `
-              You are a polite assistant for Xefere Store.
-              Always respond in a friendly, emoji-rich style.
-              Give fallback suggestions if user intent is unclear.
-              Only discuss Xefere Store products and policies.
-            `,
+            content:
+              `You are Xefere Store Assistant.\n` +
+              `- Answer greetings and personal questions politely.\n` +
+              `- For order/return/tracking questions, guide the user.\n` +
+              `- Keep messages short, friendly, and emoji-rich.\n` +
+              `- Do NOT show products unless requested.`
           },
-          { role: "user", content: userMessage },
-        ],
+          { role: "user", content: userMessage }
+        ]
       });
 
       finalReply =
         chatRes.choices?.[0]?.message?.content ||
-        "Sorry, I didn’t understand. Did you mean: track order, check products, or ask FAQ?";
+        "😊 How can I assist you today?";
     }
 
-    // ✅ Return final reply
-    res.json({ reply: finalReply });
+    return res.json({ reply: finalReply });
   } catch (err) {
-    console.error("🔥 Super-Smart Router Error:", err);
+    console.error("🔥 Smart Router Error:", err);
     res.status(500).json({
-      error:
-        "Something went wrong in smart router. Please try again or rephrase your query.",
+      error: "Smart router failed. Try again later."
     });
   }
 });
