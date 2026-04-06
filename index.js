@@ -1,7 +1,28 @@
-import express from "express"; import cors 
-from "cors"; import dotenv from "dotenv"; 
-import fetch from "node-fetch"; import OpenAI 
-from "openai";
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import fetch from "node-fetch";
+import OpenAI from "openai";
+import { MongoClient } from "mongodb";
+
+dotenv.config();
+
+
+const mongoClient = new MongoClient(process.env.MONGO_URI);
+
+async function initMongo() {
+  try {
+    await mongoClient.connect();
+    console.log("✅ MongoDB Connected");
+    const db = mongoClient.db("chatbot");
+    const conversations = db.collection("conversations");
+    return conversations;
+  } catch (err) {
+    console.error("❌ MongoDB Connection Error:", err);
+  }
+}
+
+const conversations = await initMongo();
 
 
 // 🌍 Improved Translation Function with Fallback
@@ -47,7 +68,6 @@ const PORT = process.env.PORT || 5000;
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL;
 const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
 
 
 
@@ -459,9 +479,18 @@ app.post("/smart", async (req, res) => {
         chatRes.choices?.[0]?.message?.content ||
         "😊 How can I assist you today?";
     }
-
+await conversations.insertOne({
+  userMessage: userMessage,
+  botReply: finalReply,
+  intent: intent,
+  timestamp: new Date()
+});
     return res.json({ reply: finalReply });
+
+
+
   } catch (err) {
+
     console.error("🔥 Smart Router Error:", err);
     res.status(500).json({
       error: "Smart router failed. Try again later."
@@ -476,7 +505,6 @@ app.post("/smart", async (req, res) => {
 app.listen(PORT, () => {
   console.log(`✅ Server running on port ${PORT}`);
 });
-
 
 
 
