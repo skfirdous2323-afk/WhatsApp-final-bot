@@ -4,7 +4,7 @@ import dotenv from "dotenv";
 import fetch from "node-fetch";
 import OpenAI from "openai";
 import { MongoClient } from "mongodb";
-
+import bodyParser from "body-parser";
 dotenv.config();
 
 
@@ -63,11 +63,43 @@ dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
-
 const PORT = process.env.PORT || 5000;
 const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL;
 const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
 const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+
+app.use(bodyParser.urlencoded({ extended: false }));
+
+// Home route (browser test)
+app.get("/", (req, res) => {
+  res.send("Bot is live 🚀");
+});
+
+// WhatsApp webhook
+app.post("/webhook", (req, res) => {
+  const msg = req.body.Body || "";
+  let reply = "Hello 👋";
+
+  if (msg.toLowerCase().includes("hi")) {
+    reply = "Namaste bhai! 💪 Gym join karna hai kya?";
+  } else if (msg.toLowerCase().includes("fees")) {
+    reply = "Gym fees 500/month hai 💰";
+  } else {
+    reply = "Samajh nahi aaya 😅 please 'hi' likho";
+  }
+
+  res.set("Content-Type", "text/xml");
+  res.send(`
+    <Response>
+      <Message>${reply}</Message>
+    </Response>
+  `);
+});
+
+app.listen(process.env.PORT || 3000, () => {
+  console.log("Server running 🚀");
+});
 
 
 
