@@ -3,26 +3,9 @@ import cors from "cors";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
 import OpenAI from "openai";
-import { MongoClient } from "mongodb";
+ //import { MongoClient } from "mongodb";
 import bodyParser from "body-parser";
 dotenv.config();
-
-
-const mongoClient = new MongoClient(process.env.MONGO_URI);
-
-async function initMongo() {
-  try {
-    await mongoClient.connect();
-    console.log("✅ MongoDB Connected");
-    const db = mongoClient.db("chatbot");
-    const conversations = db.collection("conversations");
-    return conversations;
-  } catch (err) {
-    console.error("❌ MongoDB Connection Error:", err);
-  }
-}
-
-const conversations = await initMongo();
 
 
 // 🌍 Improved Translation Function with Fallback
