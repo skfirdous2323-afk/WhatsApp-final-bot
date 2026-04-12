@@ -2,524 +2,624 @@ import express from "express";
 import cors from "cors";
 import dotenv from "dotenv";
 import fetch from "node-fetch";
-import OpenAI from "openai";
- //import { MongoClient } from "mongodb";
-import bodyParser from "body-parser";
-dotenv.config();
-
-
-// 🌍 Improved Translation Function with Fallback
-async function translateText(text, targetLang = "en") {
-  const urls = [
-    "https://translate.astian.org/translate",
-    "https://libretranslate.com/translate",
-    "https://libretranslate.de/translate"
-  ];
-
-  for (const url of urls) {
-    try {
-      const res = await fetch(url, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          q: text,
-          source: "auto",
-          target: targetLang,
-          format: "text",
-        }),
-      });
-
-      const data = await res.json();
-      if (data.translatedText) return data.translatedText;
-      throw new Error("Invalid response");
-    } catch (err) {
-      console.error(`⚠️ ${url} failed:`, err.message);
-    }
-  }
-
-  console.error("❌ All translation APIs failed. Returning original text.");
-  return text; // fallback to original
-}
-
 
 dotenv.config();
 const app = express();
 app.use(cors());
 app.use(express.json());
+
 const PORT = process.env.PORT || 5000;
-const SHOPIFY_STORE_URL = process.env.SHOPIFY_STORE_URL;
-const SHOPIFY_ACCESS_TOKEN = process.env.SHOPIFY_ACCESS_TOKEN;
-const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
+// ============================================
+// USER SESSIONS STORE (Har user ka data)
+// ============================================
+const userSessions = new Map();
 
-app.use(bodyParser.urlencoded({ extended: false }));
-
-// Home route (browser test)
-app.get("/", (req, res) => {
-  res.send("Bot is live 🚀");
-});
-
-// WhatsApp webhook
-app.post("/webhook", (req, res) => {
-  const msg = req.body.Body || "";
-  let reply = "Hello 👋";
-
-  if (msg.toLowerCase().includes("hi")) {
-    reply = "Namaste bhai! 💪 Gym join karna hai kya?";
-  } else if (msg.toLowerCase().includes("fees")) {
-    reply = "Gym fees 500/month hai 💰";
-  } else {
-    reply = "Samajh nahi aaya 😅 please 'hi' likho";
-  }
-
-  res.set("Content-Type", "text/xml");
-  res.send(`
-    <Response>
-      <Message>${reply}</Message>
-    </Response>
-  `);
-});
-
-app.listen(process.env.PORT || 3000, () => {
-  console.log("Server running 🚀");
-});
-
-
-
-// ✅ Test Route
-app.get("/api/info", (req, res) => {
-  res.json({
-    success: true,
-    message: "✅ Shopify Backend is Live!",
-    time: new Date().toLocaleString(),
-  });
-});
-
-
-
-
-
-// ✅ Orders Route
-app.get("/orders", async (req, res) => {
-  try {
-    const response = await fetch(
-      `https://${SHOPIFY_STORE_URL}/admin/api/2025-01/orders.json`,
-      {
-        headers: {
-          "X-Shopify-Access-Token": SHOPIFY_ACCESS_TOKEN,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    const data = await response.json();
-    res.json(data);
-  } catch (err) {
-    console.error("❌ Error fetching orders:", err);
-    res.status(500).json({ error: "Failed to fetch orders" });
-  }
-});
-
-
-
-
-
-app.post("/product", async (req, res) => {
-  try {
-    const userMessage = req.body.message?.toLowerCase() || "";
-
-    // 🧠 Detect user intent
-    const isBestProductQuery =
-      userMessage.includes("best") ||
-      userMessage.includes("top") ||
-      userMessage.includes("popular") ||
-      userMessage.includes("trending");
-
-    const isLowToHigh = userMessage.includes("low to high");
-    const isHighToLow = userMessage.includes("high to low");
-    const isDiscount = userMessage.includes("discount") || userMessage.includes("offer");
-    const isGift = userMessage.includes("gift");
-    const isRandom = userMessage.includes("random") || userMessage.includes("surprise");
-
-    // Extract price number if mentioned
-    const priceMatch = userMessage.match(/\d+/);
-    const priceLimit = priceMatch ? parseInt(priceMatch[0]) : null;
-
-    // Detect category (e.g., kitchen, decor, etc.)
-    const categoryKeywords = ["kitchen", "decor", "cleaner", "home", "office"];
-    const detectedCategory = categoryKeywords.find((c) => userMessage.includes(c));
-
-    // 🛍️ Fetch all products from Shopify
-    const shopifyRes = await fetch(`${process.env.SHOPIFY_API_URL}/products.json`, {
-      headers: {
-        "X-Shopify-Access-Token": process.env.SHOPIFY_ACCESS_TOKEN,
-      },
-    });
-
-    const data = await shopifyRes.json();
-    if (!data.products) return res.json({ reply: "❌ No products found." });
-
-    let products = data.products.map((p) => {
-      const variant = p.variants[0];
-      return {
-        title: p.title,
-        price: parseFloat(variant.price),
-        image: p.images?.[0]?.src || "",
-        link: `https://${process.env.SHOPIFY_STORE_URL}/products/${p.handle}`,
-        available: variant.available,
-        updated_at: p.updated_at,
-        tags: p.tags?.toLowerCase() || "",
-      };
-    });
-
-    // ✅ Apply filters
-    if (priceLimit) {
-      products = products.filter((p) => p.price <= priceLimit);
+// ============================================
+// GYM DATA - Aapke diye gaye rates ke hisaab se
+// ============================================
+const gymData = {
+    name: "Birbhum Gym 💪",
+    welcome: "Namaste bhai 💪\nWelcome to Birbhum Gym 🏋️‍♂️\n\nKya janna chahte ho?\n1️⃣ Fees\n2️⃣ Trial\n3️⃣ Timing\n4️⃣ Weight Loss Plan\n5️⃣ Join Now",
+    
+    fees: {
+        monthly: 699,
+        threeMonths: 1799,
+        sixMonths: 2999,
+        personalTraining: 2000,
+        offer: "🔥 First 10 members ke liye special discount!"
+    },
+    
+    timing: {
+        morning: "5 AM – 10 AM",
+        evening: "4 PM – 10 PM",
+        sunday: "Closed"
+    },
+    
+    trial: {
+        available: true,
+        duration: "1 din free",
+        message: "🎯 Free Trial Available!\n\nAap 1 din free try kar sakte ho 💪\n\nTrial book karna hai?\nApna naam aur number bhejo 📱"
+    },
+    
+    weightLossPlan: {
+        price: 2000,
+        features: [
+            "✔️ Personal training",
+            "✔️ Diet guidance",
+            "✔️ Weekly progress check"
+        ],
+        message: "🔥 Weight Loss Plan Available!\n\n✔️ Personal training\n✔️ Diet guidance\n✔️ Weekly progress check\n\nPrice: ₹2000/month\n\nInterested ho?\n\"YES\" likho 💪"
+    },
+    
+    trainers: [
+        { name: "Raj Kumar", specialty: "Weight Loss & Cardio" },
+        { name: "Samanta", specialty: "Muscle Gain & Strength" }
+    ],
+    
+    location: {
+        address: "Birbhum Gym, Ilambazar",
+        mapLink: "https://maps.google.com/?q=Birbhum+Gym+Ilambazar"
+    },
+    
+    offers: {
+        first10Members: "First 10 member = lifetime discount",
+        launchOffer: "Monthly: ₹499 – ₹799\n3 months: ₹1499\nPersonal training: ₹1500–₹3000/month"
     }
+};
 
-    if (detectedCategory) {
-      products = products.filter((p) =>
-        p.tags.includes(detectedCategory) || p.title.toLowerCase().includes(detectedCategory)
-      );
+// ============================================
+// MAIN SMART ROUTER FOR GYM
+// ============================================
+app.post("/gym", async (req, res) => {
+    let userMessage = req.body.message || "";
+    let userId = req.body.userId || "anonymous";
+    
+    console.log(`📩 [${userId}]: ${userMessage}`);
+    
+    // Get or create user session
+    let session = userSessions.get(userId);
+    if (!session) {
+        session = {
+            step: "main",
+            data: {
+                name: null,
+                phone: null,
+                interestedIn: null,
+                trialBooked: false,
+                joined: false
+            }
+        };
+        userSessions.set(userId, session);
     }
-
-    if (isDiscount) {
-      products = products.filter((p) => p.tags.includes("discount") || p.tags.includes("offer"));
+    
+    const msg = userMessage.toLowerCase().trim();
+    
+    // Check if user is in multi-step conversation
+    if (session.step !== "main") {
+        return await handleGymSteps(userId, msg, session, res);
     }
-
-    if (isBestProductQuery) {
-      products.sort((a, b) => new Date(b.updated_at) - new Date(a.updated_at));
-    }
-
-    if (isLowToHigh) {
-      products.sort((a, b) => a.price - b.price);
-    } else if (isHighToLow) {
-      products.sort((a, b) => b.price - a.price);
-    }
-
-    // Show only first 5 for clean output (pagination base)
-    products = products.slice(0, 5);
-
-    // Random suggestion
-    if (isRandom && products.length > 0) {
-      const randomProduct = products[Math.floor(Math.random() * products.length)];
-      products = [randomProduct];
-    }
-
-    // If no products
-    if (products.length === 0) {
-      return res.json({
-        reply:
-          "😔 Sorry, no matching products found.\nTry another keyword or check our best deals 🔥",
-      });
-    }
-
-// 🖼️ Create formatted reply
-let replyText = "";
-
-if (isGift) {
-  replyText += "🎁 Here are some products perfect for gifting:\n\n";
-} else if (isBestProductQuery) {
-  replyText += "🌟 Our most popular & trending picks:\n\n";
-} else if (isDiscount) {
-  replyText += "💸 Products currently on discount:\n\n";
-} else {
-  replyText += "🛍️ Check out our top products below 👇\n\n";
-}
-
-// 💬 Create formatted text message
-for (const p of products) {
-  replyText += `✨ *${p.title}*\n💰 Price: ₹${p.price}\n🔗 ${p.link}\n`;
-  if (!p.available) replyText += `⚠️ Currently Out of Stock\n`;
-  replyText += `\n`;
-}
-
-res.json({
-  reply: "🛍️ Check out our top products below 👇",
-  products: products.map((p) => ({
-    title: p.title,
-    price: `₹${p.price}`,
-    link: p.link,
-    image: p.image,
-    available: p.available ? "In Stock ✅" : "Out of Stock ❌",
-    shortDescription: p.tags
-      ? `Tags: ${p.tags.split(",").slice(0, 3).join(", ")}`
-      : "Popular product",
-  })),
-  footer: "✨ More deals available on our store homepage!"
-});
-
-
-
-  } catch (err) {
-    console.error("🧨 Product search error:", err);
-    res.status(500).json({ error: "Server error" });
-  }
-});
-
-
-
-
-
-// ✅ Order Tracking Route (Enhanced)
-app.post("/track", async (req, res) => {
-  const mobile = req.body.mobile?.trim();
-
-  if (!mobile) {
-    return res.status(400).json({ error: "❌ Type only mobile number" });
-  }
-
-  try {
-    const response = await fetch(
-      `https://${process.env.SHOPIFY_STORE_URL}/admin/api/2025-01/orders.json?status=any`,
-      {
-        headers: {
-          "X-Shopify-Access-Token": process.env.SHOPIFY_ACCESS_TOKEN,
-          "Content-Type": "application/json",
-        },
-      }
-    );
-
-    const data = await response.json();
-    const orders = data.orders || [];
-
-    // ✅ Allow partial match of mobile number (e.g., last 4 digits)
-    const matchedOrders = orders.filter(
-      (o) =>
-        o.phone?.includes(mobile) ||
-        o.shipping_address?.phone?.includes(mobile) ||
-        o.note?.includes(mobile)
-    );
-
-    if (matchedOrders.length === 0) {
-      return res.json({ message: "❌ No order found for this mobile number" });
-    }
-
-    // 🧠 Prepare AI-style reply for all matching orders
-    let reply = `📱 Found ${matchedOrders.length} order(s) linked to this mobile:\n\n`;
-
-    for (const order of matchedOrders) {
-      let status = "Processing ⏳";
-      if (order.fulfillment_status === "fulfilled") status = "Delivered ✅";
-      else if (order.fulfillment_status === "partial") status = "Partially Shipped 📦";
-      else if (order.fulfillment_status === "restocked") status = "Returned 🔁";
-      else if (order.fulfillment_status === "pending") status = "Pending 🚀";
-
-      // 🗓️ Calculate estimated delivery (3–5 days after created_at)
-      const created = new Date(order.created_at);
-      const deliveryDate = new Date(created);
-      deliveryDate.setDate(created.getDate() + 4);
-      const estDelivery = deliveryDate.toLocaleDateString("en-IN");
-
-      reply += `🆔 Order #${order.id}\n👤 ${
-        order.shipping_address?.name || "Customer"
-      }\n💰 Total: ₹${order.total_price}\n📦 Status: ${status}\n🚚 Est. Delivery: ${estDelivery}\n🔗 Track: ${
-        order.order_status_url || "Not available"
-      }\n\n`;
-    }
-
-    // ✅ Return combined friendly reply
-    res.json({ message: reply });
-  } catch (error) {
-    console.error("Error tracking order:", error);
-    res.status(500).json({ error: "Failed to track order" });
-  }
-});
-
-
-
-// ✅ FAQ / Return Policy Route
-app.post("/faq", async (req, res) => {
-  const userMessage = req.body.message?.toLowerCase() || "";
-  let reply = "❓ Sorry, I didn’t understand your question.";
-
-  if (userMessage.includes("return")) {
-    reply = "🔁 You can request a return within 7 days of delivery. Click here: https://www.xefere.store/pages/return-policy";
-  } else if (userMessage.includes("refund")) {
-    reply = "💸 Refunds are processed within 3–5 business days after we receive your returned product.";
-  } else if (userMessage.includes("cancel")) {
-    reply = "🛑 You can cancel your order before it is shipped. Once shipped, cancellation isn’t possible.";
-  } else if (userMessage.includes("track")) {
-    reply = "🚚 To track your order, please provide your mobile number (e.g., Track 9876543210)";
-  } else if (userMessage.includes("exchange")) {
-    reply = "🔄 Exchange is available for damaged or defective products only within 7 days of delivery.";
-  } else if (userMessage.includes("policy") || userMessage.includes("rules")) {
-    reply = "📜 You can check our full return & refund policy here: https://www.xefere.store/pages/return-policy";
-  } else if (userMessage.includes("help") || userMessage.includes("support")) {
-    reply = "💬 Our support team is here to help! Email us at support@xefere.store or chat with us on WhatsApp.";
-  }
-
-  res.json({ reply });
-});
-
-
-// ✅ Super-Smart Router for Xefere Store
-// SMART ROUTER
-app.post("/smart", async (req, res) => {
-  let userMessage = req.body.message || "";
-
-  try {
-    // Translate to English (fallback to original)
-    try {
-      userMessage = await translateText(userMessage, "en");
-    } catch (err) {
-      console.error("❌ Translation failed:", err);
-    }
-
-    // 🔍 Intent Detection
-    const completion = await client.chat.completions.create({
-      model: "gpt-4o-mini",
-      messages: [
-        {
-          role: "system",
-          content:
-            `You are an intent classifier for Xefere Store. ` +
-            `Reply EXACTLY one word: track, return, product, faq, chat.\n\n` +
-            `Rules:\n` +
-            `- "not received", "order not delivered", "missing", "kaha hai order" → track\n` +
-            `- "return", "refund", "exchange" → return\n` +
-            `- "price", "show items", "products", "list", "buy" → product\n` +
-            `- "delivery time", "how many days", "shipping", "policy" → faq\n` +
-            `- Name, greeting, personal chat → chat\n` +
-            `- If user sends phone number → track`
-        },
-        { role: "user", content: userMessage }
-      ]
-    });
-
-    const intent =
-      completion.choices?.[0]?.message?.content?.trim().toLowerCase() ||
-      "chat";
-
-    console.log("🧭 Detected Intent:", intent);
-
-    let finalReply = "";
-
-    // 📦 TRACK
-    if (intent === "track") {
-      const mobile = userMessage.replace(/\D/g, "");
-
-      if (!mobile) {
+    
+    // ============================================
+    // INTENT DETECTION (Bina API Ke)
+    // ============================================
+    let intent = detectGymIntent(msg);
+    console.log(`🎯 Intent: ${intent}`);
+    
+    // ============================================
+    // RESPONSE BASED ON INTENT
+    // ============================================
+    
+    // 1️⃣ FEES / PRICE
+    if (intent === "fees" || intent === "price" || msg.includes("1") || msg.includes("fee")) {
         return res.json({
-          reply: "📱 Please enter your mobile number to track order."
+            reply: `💰 **Birbhum Gym Fees:**
+
+Monthly: ₹${gymData.fees.monthly}
+3 Months: ₹${gymData.fees.threeMonths}
+6 Months: ₹${gymData.fees.sixMonths}
+
+💪 Personal Training: ₹${gymData.fees.personalTraining}/month
+
+${gymData.fees.offer}
+
+Join karna hai kya? (Yes/No)`
         });
-      }
-
-      const trackRes = await fetch(`${process.env.BASE_URL}/track`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ mobile })
-      });
-
-      const data = await trackRes.json();
-      return res.json({
-        reply: data.message || data.error || "No tracking info found."
-      });
     }
-
-    // 🔁 RETURN REQUEST
-    else if (intent === "return") {
-      return res.json({
-        reply:
-          "🔁 To return your order, please share the mobile number used during purchase."
-      });
-    }
-
-    // 🛍️ PRODUCT SEARCH
-    else if (intent === "product") {
-      const productRes = await fetch(`${process.env.BASE_URL}/product`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage })
-      });
-
-      const data = await productRes.json();
-
-      if (data.products && data.products.length > 0) {
-        const replyText =
-          "🛍️ Here are the best products based on your search:\n\n" +
-          data.products
-            .map(
-              (p) =>
-                `✨ *${p.title}*\n💰 Price: ₹${p.price}\n🔗 ${p.link}\n${
-                  p.available ? "" : "⚠️ Out of Stock"
-                }\n`
-            )
-            .join("\n");
-
+    
+    // 2️⃣ TRIAL
+    else if (intent === "trial" || msg.includes("2") || msg.includes("trial")) {
+        session.step = "collecting_trial_info";
         return res.json({
-          reply: replyText,
-          products: data.products
+            reply: gymData.trial.message
         });
-      }
-
-      return res.json({
-        reply: data.reply || "No matching products found."
-      });
     }
+    
+    // 3️⃣ TIMING
+    else if (intent === "timing" || msg.includes("3") || msg.includes("time")) {
+        return res.json({
+            reply: `⏰ **Gym Timing:**
 
-    // ❓ FAQ
-    else if (intent === "faq") {
-      const faqRes = await fetch(`${process.env.BASE_URL}/faq`, {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ message: userMessage })
-      });
+Morning: ${gymData.timing.morning}
+Evening: ${gymData.timing.evening}
+Sunday: ${gymData.timing.sunday}
 
-      const data = await faqRes.json();
-      return res.json({
-        reply: data.reply || "No FAQ found for this question."
-      });
+Aur kuch puchna hai?`
+        });
     }
+    
+    // 4️⃣ WEIGHT LOSS PLAN
+    else if (intent === "weightloss" || msg.includes("4") || msg.includes("weight") || msg.includes("loss")) {
+        session.step = "waiting_for_yes_no";
+        session.data.interestedIn = "weightloss";
+        return res.json({
+            reply: gymData.weightLossPlan.message
+        });
+    }
+    
+    // 5️⃣ JOIN NOW
+    else if (intent === "join" || msg.includes("5") || msg.includes("join")) {
+        session.step = "collecting_join_details";
+        return res.json({
+            reply: `Great bhai 💪
 
-    // 💬 GENERAL CHAT
+Apna details bhejo:
+👤 Naam:
+📱 Phone Number:
+
+Hamari team aapse contact karegi 😊`
+        });
+    }
+    
+    // LOCATION
+    else if (intent === "location" || msg.includes("location") || msg.includes("address") || msg.includes("kahan")) {
+        return res.json({
+            reply: `📍 **Location:**
+
+${gymData.location.address}
+
+Google Map link:
+${gymData.location.mapLink}
+
+Aaj hi visit karo 💪`
+        });
+    }
+    
+    // TRAINER INFO
+    else if (intent === "trainer" || msg.includes("trainer") || msg.includes("coach")) {
+        return res.json({
+            reply: `💪 **Our Certified Trainers:**
+
+👨‍🏫 **Raj Kumar** - ${gymData.trainers[0].specialty}
+👩‍🏫 **Samanta** - ${gymData.trainers[1].specialty}
+
+✔️ Muscle gain
+✔️ Weight loss
+
+Join karoge?`
+        });
+    }
+    
+    // OFFERS / DISCOUNT
+    else if (intent === "offer" || msg.includes("offer") || msg.includes("discount")) {
+        return res.json({
+            reply: `🔥 **Special Offers:**
+
+${gymData.offers.launchOffer}
+
+${gymData.offers.first10Members}
+
+Interested ho? Type "join" to get started! 💪`
+        });
+    }
+    
+    // DIET CHART
+    else if (intent === "diet" || msg.includes("diet") || msg.includes("food") || msg.includes("khana")) {
+        return res.json({
+            reply: `🥗 **Sample Diet Chart:**
+
+Morning: 4 soaked almonds + green tea
+Breakfast: 2 egg whites + 1 brown bread
+Lunch: 2 roti + 1 bowl dal + salad
+Evening: 1 fruit + protein shake
+Dinner: Grilled chicken/Paneer + vegetables
+
+Want detailed diet plan? Type "YES" 💪`
+        });
+    }
+    
+    // YES / NO HANDLING
+    else if (msg === "yes" || msg === "haan" || msg === "ha" || msg === "y") {
+        if (session.data.interestedIn === "weightloss") {
+            session.step = "collecting_weightloss_details";
+            return res.json({
+                reply: `Great bhai 💪
+
+Apna details bhejo:
+👤 Naam:
+📱 Phone Number:
+
+Hamari team aapse contact karegi weight loss plan ke liye 😊`
+            });
+        } else {
+            session.step = "collecting_join_details";
+            return res.json({
+                reply: `Great bhai 💪
+
+Apna details bhejo:
+👤 Naam:
+📱 Phone Number:
+
+Hamari team aapse contact karegi 😊`
+            });
+        }
+    }
+    
+    else if (msg === "no" || msg === "nahi" || msg === "n") {
+        session.data.interestedIn = null;
+        return res.json({
+            reply: `Koi baat nahi bhai 💪
+
+Aap kabhi bhi aa sakte ho. Koi aur help chahiye?
+
+Type:
+• fees - Membership price
+• trial - Free trial book
+• timing - Gym hours
+• weightloss - Weight loss plan
+• join - Join gym
+• location - Our address`
+        });
+    }
+    
+    // GREETING / HI / HELP
+    else if (intent === "greeting" || msg.includes("hi") || msg.includes("hello") || msg.includes("namaste")) {
+        return res.json({
+            reply: gymData.welcome
+        });
+    }
+    
+    // REMINDER / FOLLOW UP (For existing members)
+    else if (intent === "reminder" || msg.includes("reminder") || msg.includes("payment")) {
+        return res.json({
+            reply: `💳 **Payment Link:**
+
+Your membership payment link has been sent to your registered number.
+
+📱 Need help? Call us at +91 98765 43210
+
+💰 Reminder: Your membership will expire soon. Renew now for special discount!`
+        });
+    }
+    
+    // DEFAULT - Help Menu
     else {
-      const chatRes = await client.chat.completions.create({
-        model: "gpt-4o-mini",
-        messages: [
-          {
-            role: "system",
-            content:
-              `You are Xefere Store Assistant.\n` +
-              `- Answer greetings and personal questions politely.\n` +
-              `- For order/return/tracking questions, guide the user.\n` +
-              `- Keep messages short, friendly, and emoji-rich.\n` +
-              `- Do NOT show products unless requested.`
-          },
-          { role: "user", content: userMessage }
-        ]
-      });
+        return res.json({
+            reply: `❓ Bhai, main samjha nahi.
 
-      finalReply =
-        chatRes.choices?.[0]?.message?.content ||
-        "😊 How can I assist you today?";
+💪 **Type any of these:**
+
+1️⃣ fees / price - Membership rates
+2️⃣ trial - Free trial book
+3️⃣ timing - Gym hours
+4️⃣ weightloss - Weight loss plan
+5️⃣ join - Join membership
+📍 location - Our address
+👨‍🏫 trainer - About trainers
+🎁 offer - Current discounts
+🥗 diet - Diet chart
+
+Kya janna chahte ho?`
+        });
     }
-await conversations.insertOne({
-  userMessage: userMessage,
-  botReply: finalReply,
-  intent: intent,
-  timestamp: new Date()
 });
-    return res.json({ reply: finalReply });
 
+// ============================================
+// MULTI-STEP CONVERSATION HANDLER
+// ============================================
+async function handleGymSteps(userId, msg, session, res) {
+    
+    // COLLECTING TRIAL INFO
+    if (session.step === "collecting_trial_info") {
+        // Check if user sent name and phone
+        const hasName = msg.length > 2;
+        const hasPhone = msg.match(/\d{10}/);
+        
+        if (!session.data.name && hasName && !hasPhone) {
+            session.data.name = msg;
+            return res.json({
+                reply: `📱 Ab apna phone number bhejo (10 digits):
+Example: 9876543210`
+            });
+        }
+        
+        if (!session.data.phone && hasPhone) {
+            session.data.phone = msg.match(/\d{10}/)[0];
+            session.trialBooked = true;
+            session.step = "main";
+            
+            return res.json({
+                reply: `✅ **Trial Booked Successfully!** ✅
 
+👤 Name: ${session.data.name || "Guest"}
+📱 Phone: ${session.data.phone}
+⏰ Timing: ${gymData.timing.morning} or ${gymData.timing.evening}
 
-  } catch (err) {
+📍 Location: ${gymData.location.address}
 
-    console.error("🔥 Smart Router Error:", err);
-    res.status(500).json({
-      error: "Smart router failed. Try again later."
+💪 Aap kab aana chahenge? Hamari team aapse call karegi.
+
+Welcome to Birbhum Gym! 🏋️‍♂️`
+            });
+        }
+        
+        return res.json({
+            reply: `Please send:
+👤 Your Name
+📱 10-digit Phone Number
+
+Example: Raj Sharma, 9876543210`
+        });
+    }
+    
+    // COLLECTING JOIN DETAILS
+    else if (session.step === "collecting_join_details") {
+        // Parse name and phone from message
+        const phoneMatch = msg.match(/\d{10}/);
+        const nameMatch = msg.replace(/\d/g, "").trim();
+        
+        if (!session.data.name && nameMatch && nameMatch.length > 2) {
+            session.data.name = nameMatch;
+            if (phoneMatch) {
+                session.data.phone = phoneMatch[0];
+                session.joined = true;
+                session.step = "main";
+                
+                return res.json({
+                    reply: `✅ **Welcome to Birbhum Gym Family!** ✅
+
+👤 Name: ${session.data.name}
+📱 Phone: ${session.data.phone}
+
+💰 **Membership Options:**
+Monthly: ₹${gymData.fees.monthly}
+3 Months: ₹${gymData.fees.threeMonths}
+6 Months: ₹${gymData.fees.sixMonths}
+
+💪 Personal Training: ₹${gymData.fees.personalTraining}/month
+
+${gymData.fees.offer}
+
+🎯 Payment link will be sent to your WhatsApp.
+
+Aaj hi aake form fill karo! 📝
+
+📍 Location: ${gymData.location.address}`
+                });
+            }
+            return res.json({
+                reply: `📱 Ab apna phone number bhejo (10 digits):
+Example: 9876543210`
+            });
+        }
+        
+        if (!session.data.phone && phoneMatch) {
+            session.data.phone = phoneMatch[0];
+            session.joined = true;
+            session.step = "main";
+            
+            return res.json({
+                reply: `✅ **Thank you for joining!** ✅
+
+👤 Name: ${session.data.name || "Guest"}
+📱 Phone: ${session.data.phone}
+
+💰 Membership: ₹${gymData.fees.monthly}/month
+
+💪 Payment link and membership card details will be sent to your number.
+
+📍 Visit us at: ${gymData.location.address}
+
+Welcome bhai! 🏋️‍♂️`
+            });
+        }
+        
+        return res.json({
+            reply: `Please send:
+👤 Your Full Name
+📱 10-digit Phone Number
+
+Example: Raj Sharma, 9876543210`
+        });
+    }
+    
+    // COLLECTING WEIGHT LOSS DETAILS
+    else if (session.step === "collecting_weightloss_details") {
+        const phoneMatch = msg.match(/\d{10}/);
+        const nameMatch = msg.replace(/\d/g, "").trim();
+        
+        if (!session.data.name && nameMatch && nameMatch.length > 2) {
+            session.data.name = nameMatch;
+            if (phoneMatch) {
+                session.data.phone = phoneMatch[0];
+                session.step = "main";
+                
+                return res.json({
+                    reply: `✅ **Weight Loss Plan Enrolled!** ✅
+
+👤 Name: ${session.data.name}
+📱 Phone: ${session.data.phone}
+
+🔥 **Your Weight Loss Package:**
+• Personal training with ${gymData.trainers[0].name}
+• Custom diet chart (will be sent on WhatsApp)
+• Weekly progress check
+
+💰 Price: ₹${gymData.weightLossPlan.price}/month
+
+💪 Let's start your transformation journey!
+
+📍 Report at: ${gymData.location.address}`
+                });
+            }
+            return res.json({
+                reply: `📱 Ab apna phone number bhejo (10 digits):`
+            });
+        }
+        
+        if (!session.data.phone && phoneMatch) {
+            session.data.phone = phoneMatch[0];
+            session.step = "main";
+            
+            return res.json({
+                reply: `✅ **Weight Loss Plan Confirmed!** ✅
+
+👤 Name: ${session.data.name || "Guest"}
+📱 Phone: ${session.data.phone}
+
+🥗 Diet chart will be sent to your WhatsApp.
+
+💪 Personal trainer ${gymData.trainers[0].name} will guide you.
+
+Let's crush your fitness goals! 🔥`
+            });
+        }
+        
+        return res.json({
+            reply: `Please send:
+👤 Your Full Name
+📱 10-digit Phone Number
+
+To start your weight loss journey! 💪`
+        });
+    }
+    
+    return res.json({
+        reply: `❌ Something went wrong. Type "hi" to start over.`
     });
-  }
+}
+
+// ============================================
+// INTENT DETECTION FUNCTION
+// ============================================
+function detectGymIntent(message) {
+    
+    // Fees / Price
+    if (message.match(/fees|price|kitna|rate|membership cost|paise|charge|1|one/)) {
+        return "fees";
+    }
+    
+    // Trial
+    if (message.match(/trial|free trial|try|demo|test|2|two/)) {
+        return "trial";
+    }
+    
+    // Timing
+    if (message.match(/timing|time|hour|open|close|kab tak|kab se|3|three/)) {
+        return "timing";
+    }
+    
+    // Weight Loss
+    if (message.match(/weight|loss|fat|reduce|slim|body|4|four/)) {
+        return "weightloss";
+    }
+    
+    // Join
+    if (message.match(/join|member|admission|enroll|start|5|five/)) {
+        return "join";
+    }
+    
+    // Location
+    if (message.match(/location|address|kahan|map|direction|ilambazar/)) {
+        return "location";
+    }
+    
+    // Trainer
+    if (message.match(/trainer|coach|raj|samanta|instructor/)) {
+        return "trainer";
+    }
+    
+    // Offer
+    if (message.match(/offer|discount|deal|sasta|bachat|first 10/)) {
+        return "offer";
+    }
+    
+    // Diet
+    if (message.match(/diet|food|khana|meal|protein|chart/)) {
+        return "diet";
+    }
+    
+    // Reminder
+    if (message.match(/reminder|payment|renew|expire|bill/)) {
+        return "reminder";
+    }
+    
+    // Greeting
+    if (message.match(/hi|hello|namaste|hey|hola|bhai/)) {
+        return "greeting";
+    }
+    
+    return "unknown";
+}
+
+// ============================================
+// GET USER SESSION (For debugging)
+// ============================================
+app.get("/session/:userId", (req, res) => {
+    const userId = req.params.userId;
+    const session = userSessions.get(userId);
+    res.json({ session: session || null });
 });
 
+// ============================================
+// GET ALL SESSIONS (Admin only - for testing)
+// ============================================
+app.get("/sessions", (req, res) => {
+    const sessions = [];
+    for (const [userId, session] of userSessions) {
+        sessions.push({
+            userId,
+            step: session.step,
+            data: session.data,
+            trialBooked: session.trialBooked,
+            joined: session.joined
+        });
+    }
+    res.json({ sessions, count: sessions.length });
+});
 
+// ============================================
+// RESET USER SESSION
+// ============================================
+app.post("/reset/:userId", (req, res) => {
+    const userId = req.params.userId;
+    userSessions.delete(userId);
+    res.json({ success: true, message: `Session reset for ${userId}` });
+});
 
+// ============================================
+// HEALTH CHECK ROUTE
+// ============================================
+app.get("/api/info", (req, res) => {
+    res.json({
+        success: true,
+        message: "💪 Birbhum Gym Backend is Live!",
+        time: new Date().toLocaleString(),
+        gym: gymData.name
+    });
+});
 
- // ✅ Start Server
+// ============================================
+// START SERVER
+// ============================================
 app.listen(PORT, () => {
-  console.log(`✅ Server running on port ${PORT}`);
+    console.log(`✅ Birbhum Gym Server running on port ${PORT}`);
+    console.log(`💪 ${gymData.name}`);
+    console.log(`📍 ${gymData.location.address}`);
 });
+
+
+
 
 
 
