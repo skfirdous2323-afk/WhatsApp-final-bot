@@ -2,20 +2,35 @@
   "name": "my-project",
   "version": "1.0.0",
   "main": "index.js",
-  "type": "module",
+
+
   "scripts": {
     "start": "node index.js"
   },
   "dependencies": {
     "@google/generative-ai": "^0.24.1",
+    "@supabase/supabase-js": "^2.105.0",
     "@vitalets/google-translate-api": "^9.2.1",
+    "body-parser": "^2.2.2",
     "cors": "^2.8.5",
     "dotenv": "^17.2.3",
-    "express": "^5.1.0",
+    "express": "^5.2.1",
     "franc": "^6.2.0",
     "mongodb": "^7.0.0",
     "node-fetch": "^3.3.2",
     "openai": "^6.7.0",
     "translate-google": "^1.5.0"
-  }
+  },
+  "description": "",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/skfirdous2323-afk/my-bot.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/skfirdous2323-afk/my-bot/issues"
+  },
+  "homepage": "https://github.com/skfirdous2323-afk/my-bot#readme"
 }
