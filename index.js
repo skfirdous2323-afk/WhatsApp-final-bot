@@ -4,6 +4,8 @@ const express = require("express");
 const bodyParser = require("body-parser");
 const { createClient } = require("@supabase/supabase-js");
 
+
+
 const app = express();
 app.use(bodyParser.json());
 
@@ -92,9 +94,13 @@ app.post("/checkin", async (req, res) => {
       .from("attendance")
       .insert([{ mobile_number: mobile }]);
 
-    if (insertError) {
+
+if (insertError) {
       console.log("Insert error:", insertError);
-      return res.json({ error: "Insert failed" });
+    return res.json({ error: "Insert failed" });
+
+
+
     }
 
     // 🔄 Update last visit
@@ -137,6 +143,79 @@ app.post("/webhook", (req, res) => {
 });
 
 app.listen(3000, () => console.log("RUNNING"));
+
+// ➕ ADD workout
+app.post("/workout", async (req, res) => {
+  try {
+    const { mobile, day, exercise, reps } = req.body;
+
+    if (!mobile) {
+      return res.json({ error: "Mobile required" });
+    }
+
+    // ✅ Direct insert (NO customer check)
+    const { error } = await supabase
+      .from("workouts")
+      .insert([
+        {
+          mobile_number: mobile,
+          day,
+          exercise,
+          reps
+        }
+      ]);
+
+    if (error) {
+      console.log(error);
+      return res.json({ error: "Insert failed" });
+    }
+
+    res.json({ message: "Workout added 💪" });
+
+  } catch (err) {
+    console.log(err);
+    res.json({ error: "Server error" });
+  }
+});
+
+
+
+
+
+
+
+app.get("/workout/:mobile/:day", async (req, res) => {
+  try {
+    const { mobile, day } = req.params;
+
+    console.log("API HIT:", mobile, day);
+
+    const { data, error } = await supabase
+      .from("workouts")
+      .select("*")
+      .eq("mobile_number", mobile)
+      .eq("day", day);
+
+    if (error) {
+      console.log("DB ERROR:", error);
+      return res.status(500).json({ error: "Database error" });
+    }
+
+    if (!data || data.length === 0) {
+      return res.json({ message: "No workout found ❌" });
+    }
+
+    return res.json(data);
+
+  } catch (err) {
+    console.log("SERVER ERROR:", err);
+    return res.status(500).json({ error: "Server error" });
+  }
+});
+
+
+
+
 
 
 
