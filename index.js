@@ -4,7 +4,7 @@ const app = express();
 app.use(express.urlencoded({ extended: true }));
 app.use(express.json());
 
-app.post("/webhook", async (req, res) => {
+app.post("/webhook", (req, res) => {
   const welcomeMenu = `💪 *Welcome back!*
 
 1️⃣ Check-in
@@ -15,8 +15,12 @@ app.post("/webhook", async (req, res) => {
 
 ✍️ Reply with the option number.`;
 
-  console.log(welcomeMenu); // Localhost test ke liye terminal me show hoga
-  res.status(200).send("OK");
+  res.set("Content-Type", "text/xml");
+  res.send(`
+<Response>
+  <Message>${welcomeMenu}</Message>
+</Response>
+`);
 });
 
 app.listen(5000, () => {
