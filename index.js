@@ -69,7 +69,9 @@ app.post("/webhook", async (req, res) => {
     mobile = mobile.slice(-10);
   }
 
-  let reply = "";
+  let reply = welcomeMenu;
+
+
 
   // =========================
   // 1️⃣ CHECK-IN
