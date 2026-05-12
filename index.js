@@ -21,8 +21,7 @@ const welcomeMenu = `💪 *Welcome back!*
 3️⃣ Due Date
 4️⃣ Workout Plan
 5️⃣ Diet Plan
-6️⃣ Progress & Motivation
-
+6️⃣ Progress and Motivation
 ✍️ Reply with the option number.`;
 
 // Progress message
