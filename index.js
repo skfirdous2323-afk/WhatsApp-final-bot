@@ -3,7 +3,7 @@ const express = require('express');
 const cors = require('cors');
 const { createClient } = require('@supabase/supabase-js');
 const cron = require("node-cron")
-
+const axios = require("axios");
 
 const app = express();
 app.use(cors());
@@ -17,7 +17,6 @@ const supabase = createClient(
 
 // ── Static Data ───────────────────────────
 
-const axios = require("axios");
 
 app.post("/webhook", async (req,res)=>{
 
