@@ -20,6 +20,10 @@ const supabase = createClient(
 
 app.post("/webhook", async (req,res)=>{
 
+
+console.log("BODY RECEIVED:");
+console.log(JSON.stringify(req.body,null,2));
+
 try{
 
 const body=req.body;
