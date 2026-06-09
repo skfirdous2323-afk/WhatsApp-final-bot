@@ -17,6 +17,62 @@ const supabase = createClient(
 
 // ── Static Data ───────────────────────────
 
+const axios = require("axios");
+
+app.post("/webhook", async (req,res)=>{
+
+try{
+
+const body=req.body;
+
+if(body.object){
+
+const message=
+body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+
+if(message){
+
+const from=message.from;
+
+const text=message.text?.body;
+
+console.log("Message:",text);
+
+await axios.post(
+`https://graph.facebook.com/v20.0/${process.env.PHONE_NUMBER_ID}/messages`,
+{
+messaging_product:"whatsapp",
+to:from,
+text:{
+body:"Hello 👋 Thanks for your message"
+}
+},
+{
+headers:{
+Authorization:`Bearer ${process.env.WHATSAPP_TOKEN}`,
+"Content-Type":"application/json"
+}
+}
+);
+
+}
+
+}
+
+res.sendStatus(200);
+
+}catch(err){
+
+console.log(err.response?.data||err.message);
+
+res.sendStatus(500);
+
+}
+
+});
+
+
+
 const doctors = [
   { id: 1, name: 'Dr. Priya Sharma', speciality: 'Orthodontist', rating: 4.9 },
   { id: 2, name: 'Dr. Rahul Mehta', speciality: 'Endodontist', rating: 4.8 },
