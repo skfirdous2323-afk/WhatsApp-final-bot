@@ -44,22 +44,30 @@ console.log("FROM:", from);
 console.log("TEXT:", text);
 console.log("PHONE_ID:", process.env.PHONE_NUMBER_ID);
 console.log("TOKEN:", process.env.WHATSAPP_TOKEN ? "FOUND" : "MISSING");
-await axios.post(
-`https://graph.facebook.com/v20.0/${process.env.PHONE_NUMBER_ID}/messages`,
-{
-messaging_product:"whatsapp",
-to:from,
-text:{
-body:"Hello 👋 Thanks for your message"
-}
-},
-{
-headers:{
-Authorization:`Bearer ${process.env.WHATSAPP_TOKEN}`,
-"Content-Type":"application/json"
-}
-}
+
+
+const response = await axios.post(
+  `https://graph.facebook.com/v20.0/${process.env.PHONE_NUMBER_ID}/messages`,
+  {
+    messaging_product: "whatsapp",
+    to: from,
+    text: {
+      body: "Hello 👋 Thanks for your message"
+    }
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${process.env.WHATSAPP_TOKEN}`,
+      "Content-Type": "application/json"
+    }
+  }
 );
+
+console.log("META RESPONSE:");
+console.log(JSON.stringify(response.data, null, 2));
+
+
+console.log("REPLY SENT SUCCESSFULLY");
 
 }
 
@@ -78,7 +86,9 @@ res.sendStatus(500);
 
 });
 
-console.log("REPLY SENT SUCCESSFULLY");
+
+
+
 
 const doctors = [
   { id: 1, name: 'Dr. Priya Sharma', speciality: 'Orthodontist', rating: 4.9 },
