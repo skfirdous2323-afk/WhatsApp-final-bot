@@ -30,17 +30,20 @@ const body=req.body;
 
 if(body.object){
 
-const message=
+const message =
 body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+
+console.log("MESSAGE OBJECT:", JSON.stringify(message, null, 2));
 
 if(message){
 
-const from=message.from;
+const from = message.from;
+const text = message.text?.body;
 
-const text=message.text?.body;
-
-console.log("Message:",text);
-
+console.log("FROM:", from);
+console.log("TEXT:", text);
+console.log("PHONE_ID:", process.env.PHONE_NUMBER_ID);
+console.log("TOKEN:", process.env.WHATSAPP_TOKEN ? "FOUND" : "MISSING");
 await axios.post(
 `https://graph.facebook.com/v20.0/${process.env.PHONE_NUMBER_ID}/messages`,
 {
@@ -66,7 +69,8 @@ res.sendStatus(200);
 
 }catch(err){
 
-console.log(err.response?.data||err.message);
+console.log("ERROR:");
+console.log(err.response?.data || err.message);
 
 res.sendStatus(500);
 
@@ -74,7 +78,7 @@ res.sendStatus(500);
 
 });
 
-
+console.log("REPLY SENT SUCCESSFULLY");
 
 const doctors = [
   { id: 1, name: 'Dr. Priya Sharma', speciality: 'Orthodontist', rating: 4.9 },
