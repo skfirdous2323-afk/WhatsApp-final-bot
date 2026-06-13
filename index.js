@@ -63,7 +63,8 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-app.post("/test-send", async (req, res) => {
+app.get("/test-send", async (req, res) => {
+
   try {
     const response = await axios.post(
       `https://graph.facebook.com/v23.0/${process.env.PHONE_NUMBER_ID}/messages`,
