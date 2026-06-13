@@ -63,6 +63,33 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
+app.post("/test-send", async (req, res) => {
+  try {
+    const response = await axios.post(
+      `https://graph.facebook.com/v23.0/${process.env.PHONE_NUMBER_ID}/messages`,
+      {
+        messaging_product: "whatsapp",
+        to: "YOUR_NUMBER_WITH_COUNTRY_CODE",
+        type: "text",
+        text: { body: "Test from Render" }
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${process.env.TOKEN}`,
+          "Content-Type": "application/json"
+        }
+      }
+    );
+
+    res.json(response.data);
+  } catch (e) {
+    res.json(e.response?.data || e.message);
+  }
+});
+
+
+
+
 // SERVER
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
