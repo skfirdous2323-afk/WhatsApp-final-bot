@@ -66,5 +66,13 @@ app.post("/webhook", async (req, res) => {
 // SERVER
 const PORT = process.env.PORT || 5000;
 app.listen(PORT, () => {
+
+
+console.log("PHONE_NUMBER_ID:", process.env.PHONE_NUMBER_ID);
+console.log("VERIFY_TOKEN:", process.env.VERIFY_TOKEN);
+console.log("TOKEN EXISTS:", !!process.env.TOKEN);
+
+
+
   console.log("Server running on port", PORT);
 });
