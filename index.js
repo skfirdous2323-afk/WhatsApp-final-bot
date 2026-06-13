@@ -7,32 +7,31 @@ const app = express();
 
 app.use(express.json());
 
-// Home Route
+// HOME
 app.get("/", (req, res) => {
   res.send("WhatsApp Bot Running");
 });
 
-// Webhook Verification
+// WEBHOOK VERIFY
 app.get("/webhook", (req, res) => {
   const mode = req.query["hub.mode"];
   const token = req.query["hub.verify_token"];
   const challenge = req.query["hub.challenge"];
 
-  if (
-    mode === "subscribe" &&
-    token === process.env.VERIFY_TOKEN
-  ) {
+  if (mode && token === process.env.VERIFY_TOKEN) {
     return res.status(200).send(challenge);
   }
 
   res.sendStatus(403);
 });
 
-// Receive Messages
+// WEBHOOK RECEIVE
 app.post("/webhook", async (req, res) => {
+  console.log("WEBHOOK HIT:", JSON.stringify(req.body, null, 2));
+
   try {
-    const msg =
-      req.body.entry?.[0]?.changes?.[0]?.value?.messages?.[0];
+    const value = req.body?.entry?.[0]?.changes?.[0]?.value;
+    const msg = value?.messages?.[0];
 
     if (msg) {
       const from = msg.from;
@@ -44,7 +43,7 @@ app.post("/webhook", async (req, res) => {
           to: from,
           type: "text",
           text: {
-            body: "What is your name?"
+            body: "Hello 👋 Your bot is working!"
           }
         },
         {
@@ -58,17 +57,14 @@ app.post("/webhook", async (req, res) => {
 
     res.sendStatus(200);
 
-  } catch (error) {
-    console.error(
-      error.response?.data || error.message
-    );
-    res.sendStatus(500);
+  } catch (err) {
+    console.log("ERROR:", err.response?.data || err.message);
+    res.sendStatus(200);
   }
 });
 
+// SERVER
 const PORT = process.env.PORT || 5000;
-
 app.listen(PORT, () => {
-  console.log(`Server running on port ${PORT}`);
+  console.log("Server running on port", PORT);
 });
-
